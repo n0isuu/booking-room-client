@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* เพิ่มเข้า global CSS หรือใน <style> */
+.rs-picker-popup .rs-calendar {
+  padding: 1.5rem 1rem 1rem;
+  background-color: white;
+  height: auto !important;
+}
+
+/* ปรับปุ่มวันให้กลม */
+.rs-calendar-table-cell-content {
+  border-radius: 9999px !important;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto;
+}
+
+/* วันที่ถูกเลือก */
+.rs-calendar-table-cell-selected .rs-calendar-table-cell-content {
+  background-color: #6b46ff !important; /* สีม่วงในดีไซน์ */
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* เดือน */
+.rs-btn-xs {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+
+/* ปุ่ม "ปิด" */
+.custom-close-button {
+  background-color: #e53935;
+  color: white;
+  width: 100%;
+  padding: 0.75rem 0;
+  font-weight: 600;
+  border-radius: 1rem;
+  font-size: 1rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  text-align: center;
+}
