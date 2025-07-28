@@ -46,57 +46,8 @@ export default function Success() {
           <p className="text-gray-600 mb-8 leading-relaxed">
             การดำเนินการของคุณได้ถูกยกเลิกเรียบร้อยแล้ว
           </p>
-
-          {/* OK Button */}
-          <button
-            onClick={handleOkClick}
-            disabled={isProcessing}
-            className="w-full bg-green-500 hover:bg-green-600 active:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed text-white font-medium py-4 px-6 rounded-2xl transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
-          >
-            {isProcessing ? "กำลังดำเนินการ..." : "โอเค"}
-          </button>
-        </div>
-
-        {/* Additional Info */}
-        <div className="text-center mt-6">
-          <p className="text-green-700 text-sm opacity-75">
-            ✓ การยกเลิกเสร็จสิ้น
-          </p>
         </div>
       </div>
-
-      <style jsx>{`
-        @import url("https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&display=swap");
-
-        .animate-pulse-scale {
-          animation: successPulse 2s ease-in-out infinite;
-        }
-
-        @keyframes successPulse {
-          0%,
-          100% {
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.05);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fadeIn 0.8s ease-out;
-        }
-
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
   );
 }

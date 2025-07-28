@@ -1,34 +1,10 @@
 import { useState, useEffect } from "react";
+import liff from "@line/liff";
+import { useNavigate } from "react-router-dom";
+
 
 // Mock data for all bookings (expanded dataset)
-let allMockBookings = [
-  //   {
-  //     activity: "M",
-  //     booker: "executive_team",
-  //     phone: "0321987654",
-  //     room: "ห้องประชุมใหญ่ 301",
-  //     attendees: "12",
-  //     date: "2025-08-08",
-  //     startTime: "10:00",
-  //     endTime: "12:00",
-  //     specialRequest: "Board meeting preparation",
-  //     status: "Rejected",
-  //     timestamp: "27/07/2568 14:30",
-  //   },
-  //   {
-  //     activity: "N",
-  //     booker: "operations_team",
-  //     phone: "0219876543",
-  //     room: "ห้องประชุมเล็ก 204",
-  //     attendees: "15",
-  //     date: "2025-08-09",
-  //     startTime: "13:30",
-  //     endTime: "15:30",
-  //     specialRequest: "Operations review",
-  //     status: "Rejected",
-  //     timestamp: "27/07/2568 16:20",
-  //   }
-];
+let allMockBookings = [];
 
 const ITEMS_PER_PAGE = 5;
 
@@ -116,6 +92,11 @@ const updateStatus = async (bookingId, status) => {
     }
 
     const result = await response.json();
+
+    if (result.redirectUrl) {
+      window.location.href = result.redirectUrl; // Redirect if needed
+    }
+
     console.log("Status updated successfully:", result);
     return result;
   } catch (error) {
@@ -133,6 +114,11 @@ const AdminDashboard = () => {
   const [pendingCount, setPendingCount] = useState(0);
   const [approvedCount, setApprovedCount] = useState(0);
   const [rejectedCount, setRejectedCount] = useState(0);
+  const navigate = useNavigate(); // สำหรับ redirect
+
+  // line liff variables
+  const [userId, setUserId] = useState(null);
+  const [displayName, setDisplayName] = useState("");
 
   // Function to fetch booking data based on page and status
   const fetchData = async (page, status) => {
@@ -159,9 +145,42 @@ const AdminDashboard = () => {
     );
   };
 
+  const initializeLiff = async () => {
+    try {
+      await liff.init({ liffId: '2007708896-GDakVPe0' });
+
+      if (liff.isLoggedIn()) {
+        const profile = await liff.getProfile();
+        setUserId(profile.userId);
+        setDisplayName(profile.displayName);
+        console.log(`User ID: ${profile.userId}, Display Name: ${profile.displayName}`);
+
+        // ตรวจสอบ userId กับ backend
+        const res = await fetch(`https://us-central1-booking-room-backend.cloudfunctions.net/app/checkUserId/${profile.userId}`);
+
+        if (res.status === 200) {
+          const userData = await res.json();
+          console.log("User found:", userData);
+          // ดำเนินการต่อในหน้านี้
+        } else {
+          console.warn("User not found, redirecting...");
+          navigate("/notfound"); // ถ้าไม่เจอให้ redirect
+        }
+
+      } else {
+        liff.login();
+      }
+    } catch (err) {
+      console.error("LIFF initialization failed", err);
+      setError(err.message);
+      navigate("/notfound"); // หากเกิด error ก็ redirect ได้เช่นกัน
+    }
+  };
+
   // Effect to load initial data and re-fetch when filterStatus changes
   useEffect(() => {
     setCurrentPage(1);
+    initializeLiff();
     fetchData(1, filterStatus);
   }, [filterStatus]);
 
@@ -713,9 +732,8 @@ const AdminDashboard = () => {
             {["Pending", "Approved", "Rejected"].map((status) => (
               <button
                 key={status}
-                className={`tab-button ${
-                  filterStatus === status ? "active" : ""
-                }`}
+                className={`tab-button ${filterStatus === status ? "active" : ""
+                  }`}
                 onClick={() => setFilterStatus(status)}
               >
                 {status} (
