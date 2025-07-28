@@ -309,7 +309,7 @@ const AdminDashboard = () => {
         }
 
         .dashboard-title {
-          background-color: #dc3545;
+          background-color: #A12B30;
           color: white;
           padding: 10px 20px;
           margin: -20px -20px 20px -20px;
@@ -406,9 +406,9 @@ const AdminDashboard = () => {
         }
 
         .tab-button.active {
-          background-color: #dc3545;
+          background-color: #A12B30;
           color: white;
-          border-bottom-color: #dc3545;
+          border-bottom-color: #A12B30;
         }
 
         .tab-button:hover:not(.active) {
@@ -709,10 +709,10 @@ const AdminDashboard = () => {
 
       <div className="admin-dashboard">
         <div className="main-content">
-          <h1 className="dashboard-title">Admin Dashboard</h1>
+          <h1 className="dashboard-title ">Booking admin</h1>
 
-          <div className="summary-cards">
-            <div className="card pending-card">
+          <div className="summary-cards ">
+            <div className="card pending-card card bg-white rounded-lg p-2 shadow-md text-center">
               <div className="icon-wrapper">
                 <span className="icon-pending" />
               </div>
@@ -855,7 +855,7 @@ const AdminDashboard = () => {
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">อุปกรณ์ที่ขอ:</span>
-                  <span className="detail-value">snack (ตัวอย่าง)</span>
+                  <span className="detail-value"> {selectedBooking.specialRequests || "ไม่ระบุ"}</span>
                 </div>
               </div>
               <div className="modal-actions">
