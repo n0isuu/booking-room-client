@@ -21,7 +21,7 @@ import {
 export default function Booking() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(true); // เปิด calendar ทันทีเมื่อโหลด
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   const [showModal, setShowModal] = useState(false);
@@ -36,6 +36,9 @@ export default function Booking() {
   const [phone, setPhone] = useState("");
   const [attendees, setAttendees] = useState("");
   const [specialRequests, setSpecialRequests] = useState("");
+
+  // เพิ่ม state สำหรับ validation errors
+  const [validationErrors, setValidationErrors] = useState({});
 
   const thaiMonths = [
     "มกราคม",
@@ -103,6 +106,7 @@ export default function Booking() {
     setShowModal(true);
     setStartTime("");
     setEndTime("");
+    setValidationErrors({}); // รีเซ็ต validation errors
   };
 
   const closeModal = () => {
@@ -114,6 +118,7 @@ export default function Booking() {
     setPhone("");
     setAttendees("");
     setSpecialRequests("");
+    setValidationErrors({}); // รีเซ็ต validation errors
   };
 
   const formatDate = (date) => {
@@ -123,22 +128,47 @@ export default function Booking() {
     return `${year}-${month}-${day}`;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (
-      !selectedDate ||
-      !startTime ||
-      !endTime ||
-      !activity ||
-      !booker ||
-      !phone
-    ) {
-      alert("กรุณากรอกข้อมูลให้ครบ");
-      return;
+  // ฟังก์ชัน validate ข้อมูล
+  const validateForm = () => {
+    const errors = {};
+
+    if (!activity.trim()) {
+      errors.activity = "กรุณากรอกกิจกรรม/หัวข้อประชุม";
     }
 
-    if (endTime <= startTime) {
-      alert("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น");
+    if (!startTime) {
+      errors.startTime = "กรุณาเลือกเวลาเริ่มต้น";
+    }
+
+    if (!endTime) {
+      errors.endTime = "กรุณาเลือกเวลาสิ้นสุด";
+    }
+
+    if (!booker.trim()) {
+      errors.booker = "กรุณากรอกชื่อผู้จอง";
+    }
+
+    if (!phone.trim()) {
+      errors.phone = "กรุณากรอกเบอร์โทรศัพท์";
+    } else if (!/^\d{10}$/.test(phone.replace(/-/g, ""))) {
+      errors.phone = "เบอร์โทรศัพท์ต้องมี 10 หลักเท่านั้น";
+    }
+
+    if (endTime && startTime && endTime <= startTime) {
+      errors.endTime = "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น";
+    }
+
+    return errors;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate form
+    const errors = validateForm();
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
       return;
     }
 
@@ -262,6 +292,18 @@ export default function Booking() {
     }`;
   };
 
+  // ฟังก์ชันสำหรับ format เบอร์โทรขณะพิมพ์
+  const handlePhoneChange = (e) => {
+    let value = e.target.value.replace(/\D/g, ""); // เอาเฉพาะตัวเลข
+    if (value.length <= 10) {
+      setPhone(value);
+      // เคลียร์ error ถ้ามี
+      if (validationErrors.phone && value.length === 10) {
+        setValidationErrors(prev => ({...prev, phone: null}));
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto">
       <style jsx>{`
@@ -302,6 +344,9 @@ export default function Booking() {
         .form-input:focus {
           outline: none;
           border-bottom-color: #A12B30;
+        }
+        .form-input.error {
+          border-bottom-color: #ef4444;
         }
       `}</style>
 
@@ -504,30 +549,41 @@ export default function Booking() {
                 {/* กิจกรรม/หัวข้อประชุม */}
                 <div className="relative pt-4">
                   <label className="text-gray-700 text-sm block mb-1">
-                    กิจกรรม/หัวข้อประชุม
+                    กิจกรรม/หัวข้อประชุม <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     placeholder="เช่น ประชุมประจำเดือน"
-                    className="form-input w-full p-2"
+                    className={`form-input w-full p-2 ${validationErrors.activity ? 'error' : ''}`}
                     value={activity}
-                    onChange={(e) => setActivity(e.target.value)}
+                    onChange={(e) => {
+                      setActivity(e.target.value);
+                      if (validationErrors.activity && e.target.value.trim()) {
+                        setValidationErrors(prev => ({...prev, activity: null}));
+                      }
+                    }}
                     required={true}
                   />
+                  {validationErrors.activity && (
+                    <p className="text-red-500 text-xs mt-1">{validationErrors.activity}</p>
+                  )}
                 </div>
 
                 <div className="flex gap-4 pt-4">
                   {/* เวลาเริ่มต้น */}
                   <div className="w-1/2">
                     <label className="text-gray-700 text-sm block mb-1">
-                      เวลาเริ่มต้น
+                      เวลาเริ่มต้น <span className="text-red-500">*</span>
                     </label>
                     <select
-                      className="form-input w-full p-2"
+                      className={`form-input w-full p-2 ${validationErrors.startTime ? 'error' : ''}`}
                       value={startTime}
                       onChange={(e) => {
                         setStartTime(e.target.value);
                         setEndTime(""); // Reset end time when start time changes
+                        if (validationErrors.startTime && e.target.value) {
+                          setValidationErrors(prev => ({...prev, startTime: null}));
+                        }
                       }}
                       required={true}
                     >
@@ -538,17 +594,25 @@ export default function Booking() {
                         </option>
                       ))}
                     </select>
+                    {validationErrors.startTime && (
+                      <p className="text-red-500 text-xs mt-1">{validationErrors.startTime}</p>
+                    )}
                   </div>
 
                   {/* เวลาสิ้นสุด */}
                   <div className="w-1/2">
                     <label className="text-gray-700 text-sm block mb-1">
-                      เวลาสิ้นสุด
+                      เวลาสิ้นสุด <span className="text-red-500">*</span>
                     </label>
                     <select
-                      className="form-input w-full p-2"
+                      className={`form-input w-full p-2 ${validationErrors.endTime ? 'error' : ''}`}
                       value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
+                      onChange={(e) => {
+                        setEndTime(e.target.value);
+                        if (validationErrors.endTime && e.target.value && e.target.value > startTime) {
+                          setValidationErrors(prev => ({...prev, endTime: null}));
+                        }
+                      }}
                       disabled={!startTime}
                       required={true}
                     >
@@ -561,37 +625,51 @@ export default function Booking() {
                         </option>
                       ))}
                     </select>
+                    {validationErrors.endTime && (
+                      <p className="text-red-500 text-xs mt-1">{validationErrors.endTime}</p>
+                    )}
                   </div>
                 </div>
 
                 {/* ชื่อผู้จอง */}
                 <div className="relative pt-4">
                   <label className="text-gray-700 text-sm block mb-1">
-                    ชื่อผู้จอง
+                    ชื่อผู้จอง <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     placeholder="ชื่อ-นามสกุล"
-                    className="form-input w-full p-2"
+                    className={`form-input w-full p-2 ${validationErrors.booker ? 'error' : ''}`}
                     value={booker}
-                    onChange={(e) => setBooker(e.target.value)}
+                    onChange={(e) => {
+                      setBooker(e.target.value);
+                      if (validationErrors.booker && e.target.value.trim()) {
+                        setValidationErrors(prev => ({...prev, booker: null}));
+                      }
+                    }}
                     required={true}
                   />
+                  {validationErrors.booker && (
+                    <p className="text-red-500 text-xs mt-1">{validationErrors.booker}</p>
+                  )}
                 </div>
 
                 {/* เบอร์โทรศัพท์ */}
                 <div className="relative pt-4">
                   <label className="text-gray-700 text-sm block mb-1">
-                    เบอร์โทรศัพท์
+                    เบอร์โทรศัพท์ <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
-                    placeholder="08X-XXX-XXXX"
-                    className="form-input w-full p-2"
+                    placeholder="0812345678"
+                    className={`form-input w-full p-2 ${validationErrors.phone ? 'error' : ''}`}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={handlePhoneChange}
                     required={true}
                   />
+                  {validationErrors.phone && (
+                    <p className="text-red-500 text-xs mt-1">{validationErrors.phone}</p>
+                  )}
                 </div>
 
                 {/* จำนวนผู้เข้าร่วม */}

@@ -1,0 +1,930 @@
+import { useState, useEffect } from "react";
+import liff from "@line/liff";
+import { useNavigate } from "react-router-dom";
+
+const ITEMS_PER_PAGE = 5;
+
+// Simulate API call for booking data (endpoint: /getMoreBooking/{page}?status={status})
+const fetchBookingsApi = async (page, status) => {
+  try {
+    const newStatus = status.toLowerCase();
+
+    const response = await fetch(
+      `https://us-central1-booking-room-backend.cloudfunctions.net/app/getMoreBooking/${page}?status=${newStatus}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const json = await response.json();
+    const filteredData = json.data.filter((b) => b.status === newStatus);
+
+    console.log("Filtered data:", filteredData);
+
+    const startIndex = (page - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const paginatedData = filteredData.slice(startIndex, endIndex);
+
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        console.log(
+          `Returning ${paginatedData.length} items for page ${page}, status: ${newStatus}`
+        );
+        resolve({
+          paginatedData,
+          totalFiltered: json.totalItems,
+        });
+      }, 300);
+    });
+  } catch (error) {
+    console.error("Error fetching bookings:", error);
+    return {
+      paginatedData: [],
+      totalFiltered: 0,
+    };
+  }
+};
+
+// Simulate API call for status numbers (endpoint: /getStatusNumber)
+const fetchStatusNumbersApi = async () => {
+  try {
+    const response = await fetch(
+      "https://us-central1-booking-room-backend.cloudfunctions.net/app/getStatusNumber"
+    );
+    if (!response.ok) {
+      throw new Error("Failed to fetch status numbers");
+    }
+    const data = await response.json();
+
+    // แปลงข้อมูลจาก array เป็น object ที่มี key เป็น status เช่น { pending: 1, approved: 1 }
+    const counts = {};
+    data.forEach((item) => {
+      counts[item.status] = item.count;
+    });
+
+    return counts;
+  } catch (error) {
+    console.error("Error fetching status numbers:", error);
+    return { pending: 0, approved: 0, rejected: 0 }; // fallback เผื่อ error
+  }
+};
+
+// API call to update booking status
+const updateStatus = async (bookingId, status) => {
+  try {
+    const response = await fetch(
+      `https://us-central1-booking-room-backend.cloudfunctions.net/app/updateState/${bookingId}?status=${status}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (result.redirectUrl) {
+      window.location.href = result.redirectUrl; // Redirect if needed
+    }
+
+    console.log("Status updated successfully:", result);
+    return result;
+  } catch (error) {
+    console.error("Error updating status:", error);
+    throw error;
+  }
+};
+
+// Loading Circle Component
+const LoadingCircle = ({ size = 40, color = "#A12B30" }) => (
+  <div className="loading-circle-container">
+    <div className="loading-circle" style={{ width: size, height: size, borderColor: `${color}30`, borderTopColor: color }}>
+    </div>
+    <style jsx>{`
+      .loading-circle-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+      
+      .loading-circle {
+        border: 3px solid;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+  </div>
+);
+
+const AdminDashboard = () => {
+  const [bookings, setBookings] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("pending");
+  const [pendingCount, setPendingCount] = useState(0);
+  const [approvedCount, setApprovedCount] = useState(0);
+  const [rejectedCount, setRejectedCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
+  // LINE LIFF variables
+  const [userId, setUserId] = useState(null);
+  const [displayName, setDisplayName] = useState("");
+
+  // Function to fetch booking data based on page and status
+  const fetchData = async (page, status) => {
+    setIsLoading(true);
+    
+    try {
+      const { paginatedData, totalFiltered } = await fetchBookingsApi(page, status);
+
+      console.log("page:", page, "totalFiltered:", totalFiltered);
+
+      setBookings((prev) =>
+        page === 1 ? paginatedData : [...prev, ...paginatedData]
+      );
+
+      // Check if there's more data to load
+      const hasMoreData = page * ITEMS_PER_PAGE < totalFiltered;
+      setHasMore(hasMoreData);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setError("เกิดข้อผิดพลาดในการโหลดข้อมูล");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const initializeLiff = async () => {
+    try {
+      await liff.init({ liffId: '2007708896-GDakVPe0' });
+
+      if (liff.isLoggedIn()) {
+        const profile = await liff.getProfile();
+        setUserId(profile.userId);
+        setDisplayName(profile.displayName);
+        console.log(`User ID: ${profile.userId}, Display Name: ${profile.displayName}`);
+
+        // ตรวจสอบ userId กับ backend
+        const res = await fetch(`https://us-central1-booking-room-backend.cloudfunctions.net/app/checkUserId/${profile.userId}`);
+
+        if (res.status === 200) {
+          const userData = await res.json();
+          console.log("User found:", userData);
+          // ดำเนินการต่อในหน้านี้
+        } else {
+          console.warn("User not found, redirecting...");
+          navigate("/notfound"); // ถ้าไม่เจอให้ redirect
+        }
+
+      } else {
+        liff.login();
+      }
+    } catch (err) {
+      console.error("LIFF initialization failed", err);
+      setError(err.message);
+      navigate("/notfound"); // หากเกิด error ก็ redirect ได้เช่นกัน
+    }
+  };
+
+  // Auto-load more data when scrolling near bottom
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + document.documentElement.scrollTop >=
+        document.documentElement.offsetHeight - 1000 &&
+        hasMore &&
+        !isLoading
+      ) {
+        const nextPage = currentPage + 1;
+        setCurrentPage(nextPage);
+        fetchData(nextPage, filterStatus);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasMore, isLoading, currentPage, filterStatus]);
+
+  // Effect to load initial data and re-fetch when filterStatus changes
+  useEffect(() => {
+    setCurrentPage(1);
+    setBookings([]); // Clear existing bookings when switching tabs
+    initializeLiff();
+    fetchData(1, filterStatus);
+  }, [filterStatus]);
+
+  // Effect to fetch status numbers for summary cards
+  useEffect(() => {
+    const getStatusCounts = async () => {
+      const counts = await fetchStatusNumbersApi();
+      setPendingCount(counts.pending || 0);
+      setApprovedCount(counts.approved || 0);
+      setRejectedCount(counts.rejected || 0);
+    };
+    getStatusCounts();
+  }, [bookings]);
+
+  const openBookingDetails = (booking) => setSelectedBooking(booking);
+  const closeBookingDetails = () => setSelectedBooking(null);
+
+  const handleApprove = async (booking) => {
+    try {
+      await updateStatus(booking.id, "approved");
+
+      // Reset to page 1 and refresh data
+      setCurrentPage(1);
+      setBookings([]);
+      fetchData(1, filterStatus);
+      
+      // Update status counts
+      const counts = await fetchStatusNumbersApi();
+      setPendingCount(counts.pending || 0);
+      setApprovedCount(counts.approved || 0);
+      setRejectedCount(counts.rejected || 0);
+
+      closeBookingDetails();
+    } catch (error) {
+      console.error("Failed to approve booking:", error);
+      alert("เกิดข้อผิดพลาดในการอนุมัติ กรุณาลองใหม่อีกครั้ง");
+    }
+  };
+
+  const handleReject = async (booking) => {
+    try {
+      await updateStatus(booking.id, "rejected");
+
+      // Reset to page 1 and refresh data
+      setCurrentPage(1);
+      setBookings([]);
+      fetchData(1, filterStatus);
+      
+      // Update status counts
+      const counts = await fetchStatusNumbersApi();
+      setPendingCount(counts.pending || 0);
+      setApprovedCount(counts.approved || 0);
+      setRejectedCount(counts.rejected || 0);
+
+      closeBookingDetails();
+    } catch (error) {
+      console.error("Failed to reject booking:", error);
+      alert("เกิดข้อผิดพลาดในการปฏิเสธ กรุณาลองใหม่อีกครั้ง");
+    }
+  };
+
+  const toDateString = (timestamp) => {
+    if (!timestamp || !timestamp._seconds) return "Invalid date";
+    const date = new Date(timestamp._seconds * 1000);
+    return date.toLocaleString('th-TH');
+  };
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-500 text-lg mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-red-600 text-white px-4 py-2 rounded"
+          >
+            ลองใหม่
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <style>{`
+        .admin-dashboard {
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+          background-color: #f8fafc;
+        }
+
+        .main-content {
+          padding: 16px;
+          flex-grow: 1;
+          max-width: 1200px;
+          margin: 0 auto;
+          width: 100%;
+        }
+
+        .dashboard-title {
+          background: linear-gradient(135deg, #A12B30 0%, #DC2626 100%);
+          color: white;
+          padding: 16px 20px;
+          margin: -16px -16px 20px -16px;
+          font-size: 20px;
+          font-weight: bold;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(161, 43, 48, 0.2);
+        }
+
+        .summary-cards {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 20px;
+        }
+
+        .card {
+          background-color: white;
+          border-radius: 12px;
+          padding: 16px;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          border: 1px solid #f1f5f9;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .card .icon-wrapper {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 8px;
+        }
+
+        .pending-card .icon-wrapper {
+          background-color: #fef3c7;
+        }
+
+        .approved-card .icon-wrapper {
+          background-color: #d1fae5;
+        }
+
+        .card .icon-pending,
+        .card .icon-approved {
+          width: 20px;
+          height: 20px;
+          background-size: contain;
+          background-repeat: no-repeat;
+          background-position: center;
+        }
+
+        .icon-pending {
+          background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23f59e0b"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>');
+        }
+
+        .icon-approved {
+          background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2310b981"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>');
+        }
+
+        .card .value {
+          font-size: 24px;
+          font-weight: bold;
+          color: #1f2937;
+          margin-bottom: 4px;
+        }
+
+        .card .label {
+          font-size: 12px;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .tabs {
+          display: flex;
+          margin-bottom: 16px;
+          background-color: white;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          border: 1px solid #f1f5f9;
+        }
+
+        .tab-button {
+          flex: 1;
+          padding: 12px 8px;
+          border: none;
+          background-color: transparent;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #6b7280;
+          transition: all 0.3s ease;
+          position: relative;
+        }
+
+        .tab-button.active {
+          background: linear-gradient(135deg, #A12B30 0%, #DC2626 100%);
+          color: white;
+        }
+
+        .tab-button:hover:not(.active) {
+          background-color: #f8fafc;
+          color: #374151;
+        }
+
+        .booking-list {
+          background-color: transparent;
+          padding: 0;
+        }
+
+        .booking-item {
+          display: flex;
+          align-items: center;
+          padding: 12px 16px;
+          margin-bottom: 8px;
+          background-color: white;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: 1px solid #f1f5f9;
+          border-left: 4px solid transparent;
+        }
+
+        .booking-item.pending {
+          border-left-color: #f59e0b;
+        }
+
+        .booking-item.approved {
+          border-left-color: #10b981;
+        }
+
+        .booking-item.rejected {
+          border-left-color: #ef4444;
+        }
+
+        .booking-item:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .booking-item .avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #A12B30 0%, #DC2626 100%);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          font-weight: bold;
+          margin-right: 12px;
+          flex-shrink: 0;
+        }
+
+        .booking-item .details {
+          flex-grow: 1;
+          min-width: 0;
+        }
+
+        .booking-item .name {
+          font-weight: 600;
+          font-size: 14px;
+          color: #1f2937;
+          margin-bottom: 2px;
+        }
+
+        .booking-item .phone {
+          font-size: 12px;
+          color: #6b7280;
+          margin-bottom: 4px;
+        }
+
+        .booking-item .room-info,
+        .booking-item .date-time,
+        .booking-item .timestamp {
+          font-size: 12px;
+          color: #374151;
+          line-height: 1.3;
+        }
+
+        .booking-item .status-tag {
+          padding: 4px 8px;
+          border-radius: 20px;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          margin-left: 8px;
+          flex-shrink: 0;
+          letter-spacing: 0.5px;
+        }
+
+        .status-tag.pending {
+          background-color: #fef3c7;
+          color: #92400e;
+        }
+
+        .status-tag.approved {
+          background-color: #d1fae5;
+          color: #065f46;
+        }
+
+        .status-tag.rejected {
+          background-color: #fee2e2;
+          color: #991b1b;
+        }
+
+        .no-bookings {
+          text-align: center;
+          color: #6b7280;
+          padding: 40px 20px;
+          font-size: 16px;
+          background-color: white;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 16px;
+        }
+
+        .modal-content {
+          background-color: white;
+          border-radius: 16px;
+          padding: 20px;
+          width: 100%;
+          max-width: 400px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+          position: relative;
+          max-height: 80vh;
+          overflow-y: auto;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
+          border-bottom: 1px solid #f1f5f9;
+          padding-bottom: 12px;
+        }
+
+        .modal-header h2 {
+          margin: 0;
+          font-size: 18px;
+          color: #1f2937;
+          font-weight: 600;
+        }
+
+        .modal-header .close-button {
+          background: none;
+          border: none;
+          font-size: 24px;
+          cursor: pointer;
+          color: #6b7280;
+          line-height: 1;
+          padding: 4px;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+        }
+
+        .modal-header .close-button:hover {
+          background-color: #f3f4f6;
+          color: #374151;
+        }
+
+        .modal-body {
+          margin-bottom: 16px;
+        }
+
+        .detail-item {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+
+        .avatar-modal {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #A12B30 0%, #DC2626 100%);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          font-weight: bold;
+          margin-right: 12px;
+          flex-shrink: 0;
+        }
+
+        .name-phone-modal p {
+          margin: 0;
+          font-size: 13px;
+          color: #6b7280;
+          line-height: 1.4;
+        }
+
+        .name-phone-modal strong {
+          font-size: 16px;
+          color: #1f2937;
+        }
+
+        .detail-row {
+          display: flex;
+          margin-bottom: 8px;
+          font-size: 14px;
+        }
+
+        .detail-label {
+          flex: 1;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .detail-value {
+          flex: 2;
+          color: #1f2937;
+          font-weight: 400;
+        }
+
+        .modal-actions {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          padding-top: 12px;
+          border-top: 1px solid #f1f5f9;
+        }
+
+        .approve-button,
+        .reject-button {
+          flex: 1;
+          padding: 10px 16px;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .approve-button {
+          background: #10b981;
+          color: white;
+        }
+
+        .approve-button:hover {
+          background: #059669;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .reject-button {
+          background: #ef4444;
+          color: white;
+        }
+
+        .reject-button:hover {
+          background: #dc2626;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        @media (max-width: 640px) {
+          .main-content {
+            padding: 12px;
+          }
+          
+          .dashboard-title {
+            font-size: 18px;
+            padding: 12px 16px;
+            margin: -12px -12px 16px -12px;
+          }
+          
+          .summary-cards {
+            gap: 8px;
+          }
+          
+          .booking-item {
+            padding: 10px 12px;
+          }
+          
+          .modal-content {
+            margin: 16px;
+            padding: 16px;
+          }
+          
+          .tab-button {
+            font-size: 12px;
+            padding: 10px 6px;
+          }
+          
+          .booking-item .name {
+            font-size: 13px;
+          }
+          
+          .booking-item .phone,
+          .booking-item .room-info,
+          .booking-item .date-time,
+          .booking-item .timestamp {
+            font-size: 11px;
+          }
+        }
+      `}</style>
+
+      <div className="admin-dashboard">
+        <div className="main-content">
+          <h1 className="dashboard-title">Booking Admin</h1>
+
+          <div className="summary-cards">
+            <div className="card pending-card">
+              <div className="icon-wrapper">
+                <span className="icon-pending" />
+              </div>
+              <div className="value">{pendingCount || 0}</div>
+              <div className="label">Pending</div>
+            </div>
+            <div className="card approved-card">
+              <div className="icon-wrapper">
+                <span className="icon-approved" />
+              </div>
+              <div className="value">{approvedCount || 0}</div>
+              <div className="label">Approved</div>
+            </div>
+          </div>
+
+          <div className="tabs">
+            {["pending", "approved", "rejected"].map((status) => (
+              <button
+                key={status}
+                className={`tab-button ${filterStatus === status ? "active" : ""}`}
+                onClick={() => setFilterStatus(status)}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)} (
+                {{
+                  pending: pendingCount || 0,
+                  approved: approvedCount || 0,
+                  rejected: rejectedCount || 0,
+                }[status]}
+                )
+              </button>
+            ))}
+          </div>
+
+          <div className="booking-list">
+            {bookings.length > 0 ? (
+              bookings.map((booking, index) => (
+                <div
+                  key={booking.id + index}
+                  className={`booking-item ${booking.status.toLowerCase()}`}
+                  onClick={() => openBookingDetails(booking)}
+                >
+                  <div className="avatar">
+                    {booking.booker[0].toUpperCase()}
+                  </div>
+                  <div className="details">
+                    <div className="name">{booking.booker}</div>
+                    <div className="phone">{booking.phone}</div>
+                    <div className="room-info">
+                      ห้อง: {booking.selectedRoom || "undefined"}
+                    </div>
+                    <div className="date-time">
+                      วันที่: {booking.date} เวลา: {booking.startTime}-{booking.endTime}
+                    </div>
+                    <div className="timestamp">
+                      จองเมื่อ: {toDateString(booking.timestamp)}
+                    </div>
+                  </div>
+                  <div className={`status-tag ${booking.status.toLowerCase()}`}>
+                    {booking.status}
+                  </div>
+                </div>
+              ))
+            ) : !isLoading ? (
+              <p className="no-bookings">ไม่มีรายการจอง</p>
+            ) : null}
+
+            {/* Show loading spinner when loading more data */}
+            {isLoading && <LoadingCircle />}
+          </div>
+        </div>
+
+        {selectedBooking && (
+          <div className="modal-overlay" onClick={closeBookingDetails}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>รายละเอียดการจอง</h2>
+                <button className="close-button" onClick={closeBookingDetails}>
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="detail-item">
+                  <span className="avatar-modal">
+                    {selectedBooking.booker[0].toUpperCase()}
+                  </span>
+                  <div className="name-phone-modal">
+                    <p><strong>{selectedBooking.booker}</strong></p>
+                    <p>{selectedBooking.phone || "N/A"}</p>
+                    <p>จองเมื่อ: {toDateString(selectedBooking.timestamp)}</p>
+                  </div>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">ห้อง:</span>
+                  <span className="detail-value">
+                    {selectedBooking.selectedRoom || "undefined"}
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">วันที่:</span>
+                  <span className="detail-value">{selectedBooking.date}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">เวลา:</span>
+                  <span className="detail-value">
+                    {selectedBooking.startTime} - {selectedBooking.endTime}
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">ระยะเวลา:</span>
+                  <span className="detail-value">
+                    {new Date(`2000/01/01 ${selectedBooking.endTime}`).getHours() -
+                      new Date(`2000/01/01 ${selectedBooking.startTime}`).getHours()}{" "}
+                    ชั่วโมง
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">ผู้เข้าร่วม:</span>
+                  <span className="detail-value">
+                    {selectedBooking.attendees} คน
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">วัตถุประสงค์:</span>
+                  <span className="detail-value">
+                    {selectedBooking.activity || "N/A"}
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">อุปกรณ์ที่ขอ:</span>
+                  <span className="detail-value">
+                    {selectedBooking.specialRequests || "ไม่ระบุ"}
+                  </span>
+                </div>
+              </div>
+              <div className="modal-actions">
+                {selectedBooking.status.toLowerCase() === "pending" && (
+                  <>
+                    <button
+                      className="approve-button"
+                      onClick={() => handleApprove(selectedBooking)}
+                    >
+                      อนุมัติ
+                    </button>
+                    <button
+                      className="reject-button"
+                      onClick={() => handleReject(selectedBooking)}
+                    >
+                      ปฏิเสธ
+                    </button>
+                  </>
+                )}
+                {selectedBooking.status.toLowerCase() !== "pending" && (
+                  <p style={{ textAlign: "center", width: "100%", color: "#6b7280" }}>
+                    สถานะ: {selectedBooking.status}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AdminDashboard;

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import liff from "@line/liff";
 import { useNavigate } from "react-router-dom";
-
+import { Clock, CheckCircle, XCircle, User, Phone, Calendar, MapPin, Users, Target, Settings, Loader2 } from "lucide-react";
 
 // Mock data for all bookings (expanded dataset)
 let allMockBookings = [];
@@ -24,7 +24,39 @@ const fetchBookingsApi = async (page, status) => {
     );
 
     const json = await response.json();
-    const filteredData = json.data.filter((b) => b.status === newStatus);
+    let filteredData = json.data.filter((b) => b.status === newStatus);
+
+    // Sort by timestamp - newest first (แก้ไขให้เรียงจากใหม่ไปเก่า)
+filteredData = filteredData.sort((a, b) => {
+  // ตรวจสอบ timestamp ทั้ง _seconds และ seconds
+  let timeA = 0;
+  let timeB = 0;
+  
+  if (a.timestamp) {
+    if (a.timestamp._seconds) {
+      timeA = a.timestamp._seconds;
+    } else if (a.timestamp.seconds) {
+      timeA = a.timestamp.seconds;
+    } else if (typeof a.timestamp === 'number') {
+      timeA = a.timestamp;
+    }
+  }
+  
+  if (b.timestamp) {
+    if (b.timestamp._seconds) {
+      timeB = b.timestamp._seconds;
+    } else if (b.timestamp.seconds) {
+      timeB = b.timestamp.seconds;
+    } else if (typeof b.timestamp === 'number') {
+      timeB = b.timestamp;
+    }
+  }
+  
+  console.log(`Comparing: A(${timeA}) vs B(${timeB}), Result: ${timeB - timeA}`);
+  return timeB - timeA; // เรียงจากใหม่ไปเก่า (timestamp มากกว่าขึ้นก่อน)
+});
+
+    console.log("Filtered data:", filteredData);
 
     const startIndex = (page - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -36,8 +68,8 @@ const fetchBookingsApi = async (page, status) => {
           `Returning ${paginatedData.length} items for page ${page}, status: ${newStatus}`
         );
         resolve({
-          paginatedData,
-          totalFiltered: filteredData.length,
+          paginatedData: filteredData,
+          totalFiltered: json.totalItems,
         });
       }, 300);
     });
@@ -55,13 +87,12 @@ const fetchStatusNumbersApi = async () => {
   try {
     const response = await fetch(
       "https://us-central1-booking-room-backend.cloudfunctions.net/app/getStatusNumber"
-    ); // หรือใส่ URL จริงของคุณ
+    );
     if (!response.ok) {
       throw new Error("Failed to fetch status numbers");
     }
     const data = await response.json();
 
-    // แปลงข้อมูลจาก array เป็น object ที่มี key เป็น status เช่น { pending: 1, success: 1 }
     const counts = {};
     data.forEach((item) => {
       counts[item.status] = item.count;
@@ -70,7 +101,7 @@ const fetchStatusNumbersApi = async () => {
     return counts;
   } catch (error) {
     console.error("Error fetching status numbers:", error);
-    return { pending: 0, success: 0, rejected: 0 }; // fallback เผื่อ error
+    return { pending: 0, success: 0, rejected: 0 };
   }
 };
 
@@ -94,7 +125,7 @@ const updateStatus = async (bookingId, status) => {
     const result = await response.json();
 
     if (result.redirectUrl) {
-      window.location.href = result.redirectUrl; // Redirect if needed
+      window.location.href = result.redirectUrl;
     }
 
     console.log("Status updated successfully:", result);
@@ -114,36 +145,99 @@ const AdminDashboard = () => {
   const [pendingCount, setPendingCount] = useState(0);
   const [approvedCount, setApprovedCount] = useState(0);
   const [rejectedCount, setRejectedCount] = useState(0);
-  const navigate = useNavigate(); // สำหรับ redirect
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
+  const navigate = useNavigate();
 
   // line liff variables
-  const [userId, setUserId] = useState(null);
-  const [displayName, setDisplayName] = useState("");
+  const [setUserId] = useState(null);
+  const [setDisplayName] = useState("");
 
   // Function to fetch booking data based on page and status
-  const fetchData = async (page, status) => {
-    console.log(`Fetching data for page: ${page}, status: ${status}`);
+  const fetchData = async (page, status, isInitial = false) => {
+    if (isInitial) {
+      setInitialLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
 
-    const { paginatedData, totalFiltered } = await fetchBookingsApi(
-      page,
-      status
-    );
+    const { paginatedData, totalFiltered } = await fetchBookingsApi(page, status);
 
-    console.log(
-      `Fetched ${paginatedData.length} bookings for page ${page}, status: ${status}`
-    );
+    console.log("page:", page, "totalFiltered:", totalFiltered);
 
-    setBookings((prev) =>
-      page === 1 ? paginatedData : [...prev, ...paginatedData]
-    );
+    setBookings((prev) => {
+      let newBookings;
+      
+      if (page === 1) {
+        newBookings = [...paginatedData];
+      } else {
+        newBookings = [...prev, ...paginatedData];
+      }
+      
+      // เรียงข้อมูลใหม่ทั้งหมดหลังจากรวมแล้ว เพื่อให้แน่ใจว่าเรียงถูกต้อง
+      newBookings = newBookings.sort((a, b) => {
+        let timeA = 0;
+        let timeB = 0;
+        
+        if (a.timestamp) {
+          if (a.timestamp._seconds) {
+            timeA = a.timestamp._seconds;
+          } else if (a.timestamp.seconds) {
+            timeA = a.timestamp.seconds;
+          } else if (typeof a.timestamp === 'number') {
+            timeA = a.timestamp;
+          }
+        }
+        
+        if (b.timestamp) {
+          if (b.timestamp._seconds) {
+            timeB = b.timestamp._seconds;
+          } else if (b.timestamp.seconds) {
+            timeB = b.timestamp.seconds;
+          } else if (typeof b.timestamp === 'number') {
+            timeB = b.timestamp;
+          }
+        }
+        
+        console.log(`Final sort - A(${timeA}) vs B(${timeB}), Result: ${timeB - timeA}`);
+        return timeB - timeA; // ใหม่ไปเก่า
+      });
+      
+      return newBookings;
+    });
 
     const hasMoreData = page * ITEMS_PER_PAGE < totalFiltered;
     setHasMore(hasMoreData);
 
-    console.log(
-      `Has more data: ${hasMoreData}, Total filtered: ${totalFiltered}`
-    );
+    if (isInitial) {
+      setInitialLoading(false);
+    } else {
+      setLoadingMore(false);
+    }
   };
+
+  // เพิ่ม infinite scroll handler
+  const handleScroll = useCallback(() => {
+    if (loadingMore || !hasMore || initialLoading) return;
+
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+
+    // เมื่อผู้ใช้เลื่อนลงมาใกล้ท้ายหน้า (เหลือ 100px)
+    if (scrollTop + windowHeight >= documentHeight - 100) {
+      const nextPage = currentPage + 1;
+      console.log(`Auto loading more data - Next page: ${nextPage}, Current status: ${filterStatus}`);
+      setCurrentPage(nextPage);
+      fetchData(nextPage, filterStatus);
+    }
+  }, [loadingMore, hasMore, initialLoading, currentPage, filterStatus]);
+
+  // เพิ่ม scroll event listener
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   const initializeLiff = async () => {
     try {
@@ -155,16 +249,14 @@ const AdminDashboard = () => {
         setDisplayName(profile.displayName);
         console.log(`User ID: ${profile.userId}, Display Name: ${profile.displayName}`);
 
-        // ตรวจสอบ userId กับ backend
         const res = await fetch(`https://us-central1-booking-room-backend.cloudfunctions.net/app/checkUserId/${profile.userId}`);
 
         if (res.status === 200) {
           const userData = await res.json();
           console.log("User found:", userData);
-          // ดำเนินการต่อในหน้านี้
         } else {
           console.warn("User not found, redirecting...");
-          navigate("/notfound"); // ถ้าไม่เจอให้ redirect
+          navigate("/notfound");
         }
 
       } else {
@@ -173,15 +265,15 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error("LIFF initialization failed", err);
       setError(err.message);
-      navigate("/notfound"); // หากเกิด error ก็ redirect ได้เช่นกัน
+      navigate("/notfound");
     }
   };
 
   // Effect to load initial data and re-fetch when filterStatus changes
   useEffect(() => {
     setCurrentPage(1);
-    initializeLiff();
-    fetchData(1, filterStatus);
+    // initializeLiff();
+    fetchData(1, filterStatus, true);
   }, [filterStatus]);
 
   // Effect to fetch status numbers for summary cards
@@ -211,14 +303,12 @@ const AdminDashboard = () => {
     try {
       await updateStatus(booking.id, "approved");
 
-      // Update local state
       const updatedBookings = allMockBookings.map((b) =>
         b.id === booking.id ? { ...b, status: "Approved" } : b
       );
       allMockBookings.splice(0, allMockBookings.length, ...updatedBookings);
 
-      // Refresh data
-      fetchData(1, filterStatus);
+      fetchData(1, filterStatus, true);
       fetchStatusNumbersApi().then((counts) => {
         setPendingCount(counts.pending);
         setApprovedCount(counts.approved);
@@ -236,14 +326,12 @@ const AdminDashboard = () => {
     try {
       await updateStatus(booking.id, "rejected");
 
-      // Update local state
       const updatedBookings = allMockBookings.map((b) =>
         b.id === booking.id ? { ...b, status: "Rejected" } : b
       );
       allMockBookings.splice(0, allMockBookings.length, ...updatedBookings);
 
-      // Refresh data
-      fetchData(1, filterStatus);
+      fetchData(1, filterStatus, true);
       fetchStatusNumbersApi().then((counts) => {
         setPendingCount(counts.pending);
         setApprovedCount(counts.approved);
@@ -260,480 +348,103 @@ const AdminDashboard = () => {
   const toDateString = (timestamp) => {
     if (!timestamp || !timestamp._seconds) return "Invalid date";
     const date = new Date(timestamp._seconds * 1000);
-    return date.toLocaleString(); // หรือ toLocaleDateString()
+    return date.toLocaleString();
+  };
+
+  const getStatusBorderColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'pending': return 'border-l-amber-400';
+      case 'approved': return 'border-l-green-400';
+      case 'rejected': return 'border-l-red-400';
+      default: return 'border-l-gray-400';
+    }
+  };
+
+  // ฟังก์ชันตรวจสอบการจองซ้ำ
+  const checkOverlappingBookings = (currentBooking, allBookings) => {
+    const overlapping = allBookings.filter(booking => {
+      // ไม่เปรียบเทียบกับตัวเอง
+      if (booking.id === currentBooking.id || booking.booker === currentBooking.booker) return false;
+      
+      // ต้องเป็นห้องเดียวกันและวันเดียวกัน
+      if (booking.selectedRoom !== currentBooking.selectedRoom || booking.date !== currentBooking.date) return false;
+      
+      // ต้องเป็น approved หรือ pending เท่านั้น (ไม่นับ rejected)
+      if (booking.status.toLowerCase() === 'rejected') return false;
+      
+      // แปลงเวลาเป็น minutes เพื่อเปรียบเทียบ
+      const currentStart = convertTimeToMinutes(currentBooking.startTime);
+      const currentEnd = convertTimeToMinutes(currentBooking.endTime);
+      const bookingStart = convertTimeToMinutes(booking.startTime);
+      const bookingEnd = convertTimeToMinutes(booking.endTime);
+      
+      // ตรวจสอบว่าเวลาทับซ้อนกันไหม
+      return (currentStart < bookingEnd && currentEnd > bookingStart);
+    });
+    
+    return overlapping;
+  };
+
+  // ฟังก์ชันแปลงเวลาเป็น minutes
+  const convertTimeToMinutes = (timeString) => {
+    if (!timeString) return 0;
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <style>{`
-        .admin-dashboard {
-          display: flex;
-          flex-direction: column;
-          min-height: 100vh;
-          background-color: #f0f2f5;
-        }
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Header */}
+      <div className="bg-white">
+        <div className="pb-4">
+          <div className="bg-red-700 text-white px-6 py-4">
+            <h3 className="text-xl font-bold">Booking Admin</h3>
+          </div>
+        </div>
+      </div>
 
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px 15px;
-          background-color: white;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-          color: #333;
-          font-size: 15px;
-          font-weight: bold;
-        }
-
-        .header-left,
-        .header-right {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .header-left .time {
-          font-weight: normal;
-        }
-
-        .header-right .icon {
-          width: 20px;
-          height: 20px;
-          filter: invert(30%) sepia(0%) saturate(0%) hue-rotate(0deg)
-            brightness(0%) contrast(100%);
-        }
-
-        .main-content {
-          padding: 20px;
-          flex-grow: 1;
-        }
-
-        .dashboard-title {
-          background-color: #A12B30;
-          color: white;
-          padding: 10px 20px;
-          margin: -20px -20px 20px -20px;
-          font-size: 24px;
-          font-weight: bold;
-        }
-
-        .summary-cards {
-          display: flex;
-          justify-content: space-around;
-          gap: 15px;
-          margin-bottom: 20px;
-        }
-
-        .card {
-          background-color: white;
-          border-radius: 10px;
-          padding: 20px;
-          text-align: center;
-          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .card .icon-wrapper {
-          width: 50px;
-          height: 50px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 10px;
-        }
-
-        .pending-card .icon-wrapper {
-          background-color: #ffe0b2;
-        }
-
-        .approved-card .icon-wrapper {
-          background-color: #c8e6c9;
-        }
-
-        .card .icon-pending,
-        .card .icon-approved {
-          width: 30px;
-          height: 30px;
-          background-size: contain;
-          background-repeat: no-repeat;
-          background-position: center;
-        }
-
-        .icon-pending {
-          background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fb8c00"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>');
-        }
-
-        .icon-approved {
-          background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%234CAF50"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>');
-        }
-
-        .card .value {
-          font-size: 32px;
-          font-weight: bold;
-          color: #333;
-        }
-
-        .card .label {
-          font-size: 14px;
-          color: #666;
-        }
-
-        .tabs {
-          display: flex;
-          margin-bottom: 20px;
-          background-color: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .tab-button {
-          flex: 1;
-          padding: 12px 0;
-          border: none;
-          background-color: transparent;
-          cursor: pointer;
-          font-size: 16px;
-          font-weight: 500;
-          color: #555;
-          transition: background-color 0.3s ease, color 0.3s ease;
-          border-bottom: 3px solid transparent;
-        }
-
-        .tab-button.active {
-          background-color: #A12B30;
-          color: white;
-          border-bottom-color: #A12B30;
-        }
-
-        .tab-button:hover:not(.active) {
-          background-color: #f5f5f5;
-        }
-
-        .booking-list {
-          background-color: transparent;
-          border-radius: 0;
-          box-shadow: none;
-          padding: 0;
-        }
-
-        .booking-item {
-          display: flex;
-          align-items: flex-start;
-          padding: 15px;
-          margin-bottom: 10px;
-          background-color: #fff;
-          border-radius: 10px;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-          cursor: pointer;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
-          border-left: 4px solid transparent;
-        }
-
-        .booking-item.pending {
-          border-left-color: #ffc107;
-        }
-
-        .booking-item.approved {
-          border-left-color: #28a745;
-        }
-
-        .booking-item.rejected {
-          border-left-color: #dc3545;
-        }
-
-        .booking-item:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .booking-item:last-child {
-          margin-bottom: 0;
-        }
-
-        .booking-item .avatar {
-          width: 45px;
-          height: 45px;
-          border-radius: 50%;
-          background-color: #007bff;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 20px;
-          font-weight: bold;
-          margin-right: 15px;
-          flex-shrink: 0;
-        }
-
-        .booking-item .details {
-          flex-grow: 1;
-        }
-
-        .booking-item .name {
-          font-weight: bold;
-          font-size: 16px;
-          color: #333;
-          margin-bottom: 2px;
-        }
-
-        .booking-item .phone {
-          font-size: 14px;
-          color: #777;
-          margin-bottom: 5px;
-        }
-
-        .booking-item .room-info,
-        .booking-item .date-time,
-        .booking-item .timestamp {
-          font-size: 13px;
-          color: #555;
-          line-height: 1.4;
-        }
-
-        .booking-item .status-tag {
-          padding: 5px 10px;
-          border-radius: 15px;
-          font-size: 12px;
-          font-weight: bold;
-          text-transform: capitalize;
-          margin-left: 15px;
-          flex-shrink: 0;
-        }
-
-        .status-tag.pending {
-          background-color: #fff3cd;
-          color: #856404;
-        }
-
-        .status-tag.approved {
-          background-color: #d4edda;
-          color: #155724;
-        }
-
-        .status-tag.rejected {
-          background-color: #f8d7da;
-          color: #721c24;
-        }
-
-        .no-bookings {
-          text-align: center;
-          color: #777;
-          padding: 20px;
-        }
-
-        .load-more-button {
-          display: block;
-          width: 100%;
-          margin: 20px 0;
-          padding: 12px 20px;
-          background-color: #007bff;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-size: 16px;
-          cursor: pointer;
-          transition: background-color 0.3s ease;
-        }
-
-        .load-more-button:hover {
-          background-color: #0056b3;
-        }
-
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(0, 0, 0, 0.6);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .modal-content {
-          background-color: white;
-          border-radius: 10px;
-          padding: 25px;
-          width: 90%;
-          max-width: 400px;
-          box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-          position: relative;
-        }
-
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-          border-bottom: 1px solid #eee;
-          padding-bottom: 15px;
-        }
-
-        .modal-header h2 {
-          margin: 0;
-          font-size: 22px;
-          color: #333;
-        }
-
-        .modal-header .close-button {
-          background: none;
-          border: none;
-          font-size: 28px;
-          cursor: pointer;
-          color: #888;
-          line-height: 1;
-        }
-
-        .modal-body {
-          margin-bottom: 20px;
-        }
-
-        .detail-item {
-          display: flex;
-          align-items: center;
-          margin-bottom: 15px;
-        }
-
-        .avatar-modal {
-          width: 60px;
-          height: 60px;
-          border-radius: 50%;
-          background-color: #007bff;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 28px;
-          font-weight: bold;
-          margin-right: 15px;
-          flex-shrink: 0;
-        }
-
-        .name-phone-modal p {
-          margin: 0;
-          font-size: 15px;
-          color: #555;
-        }
-
-        .name-phone-modal strong {
-          font-size: 18px;
-          color: #333;
-        }
-
-        .detail-row {
-          display: flex;
-          margin-bottom: 10px;
-          font-size: 15px;
-        }
-
-        .detail-label {
-          flex: 1;
-          color: #666;
-          font-weight: 500;
-        }
-
-        .detail-value {
-          flex: 2;
-          color: #333;
-          font-weight: 400;
-        }
-
-        .modal-actions {
-          display: flex;
-          justify-content: space-around;
-          gap: 15px;
-          padding-top: 15px;
-          border-top: 1px solid #eee;
-        }
-
-        .approve-button,
-        .reject-button {
-          flex: 1;
-          padding: 12px 20px;
-          border: none;
-          border-radius: 8px;
-          font-size: 16px;
-          font-weight: bold;
-          cursor: pointer;
-          transition: background-color 0.3s ease;
-        }
-
-        .approve-button {
-          background-color: #28a745;
-          color: white;
-        }
-
-        .approve-button:hover {
-          background-color: #218838;
-        }
-
-        .reject-button {
-          background-color: #dc3545;
-          color: white;
-        }
-
-        .reject-button:hover {
-          background-color: #c82333;
-        }
-
-        .settings-button {
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          background-color: #6c757d;
-          border-radius: 50%;
-          width: 50px;
-          height: 50px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-          cursor: pointer;
-          z-index: 999;
-        }
-
-        .settings-button img {
-          width: 28px;
-          height: 28px;
-          filter: invert(100%);
-        }
-      `}</style>
-
-      <div className="admin-dashboard">
-        <div className="main-content">
-          <h1 className="dashboard-title ">Booking admin</h1>
-
-          <div className="summary-cards ">
-            <div className="card pending-card card bg-white rounded-lg p-2 shadow-md text-center">
-              <div className="icon-wrapper">
-                <span className="icon-pending" />
+      {/* Main Content */}
+      <div className="px-4 pb-6 space-y-6">
+        {/* Summary Cards - แบบเล็กและไอคอนซ้าย */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Pending Card */}
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="flex items-center">
+              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mr-3">
+                <Clock className="w-5 h-5 text-amber-600" />
               </div>
-              <div className="value">{pendingCount || 0}</div>
-              <div className="label">Pending</div>
-            </div>
-            <div className="card approved-card">
-              <div className="icon-wrapper">
-                <span className="icon-approved" />
+              <div>
+                <p className="text-sm font-medium text-amber-700 mb-1">Pending</p>
+                <p className="text-xl font-bold text-amber-800">{pendingCount || 0}</p>
               </div>
-              <div className="value">{approvedCount || 0}</div>
-              <div className="label">Approved</div>
             </div>
           </div>
 
-          <div className="tabs">
+          {/* Approved Card */}
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="flex items-center">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-green-700 mb-1">Approved</p>
+                <p className="text-xl font-bold text-green-800">{approvedCount || 0}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="flex">
             {["Pending", "Approved", "Rejected"].map((status) => (
               <button
                 key={status}
-                className={`tab-button ${filterStatus === status ? "active" : ""
-                  }`}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                  filterStatus === status
+                    ? "bg-red-800 text-white border-b-2 border-red-800"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
                 onClick={() => setFilterStatus(status)}
               >
                 {status} (
@@ -748,149 +459,217 @@ const AdminDashboard = () => {
               </button>
             ))}
           </div>
-
-          <div className="booking-list">
-            {bookings.length > 0 ? (
-              bookings.map((booking, index) => (
-                <div
-                  key={booking.booker + index}
-                  className={`booking-item ${booking.status.toLowerCase()}`}
-                  onClick={() => openBookingDetails(booking)}
-                >
-                  <div className="avatar">
-                    {booking.booker[0].toUpperCase()}
-                  </div>
-                  <div className="details">
-                    <div className="name">{booking.booker}</div>
-                    <div className="phone">{booking.phone}</div>
-                    <div className="room-info">
-                      ห้อง: {booking.selectedRoom || "undefined"}
-                    </div>
-                    <div className="date-time">
-                      วันที่: {booking.date} เวลา: {booking.startTime} -{" "}
-                      {booking.endTime}
-                    </div>
-                    <div className="timestamp">
-                      จองเมื่อ: {toDateString(booking.timestamp)}
-                    </div>
-                  </div>
-                  <div className={`status-tag ${booking.status.toLowerCase()}`}>
-                    {booking.status}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="no-bookings">ไม่มีรายการจอง</p>
-            )}
-
-            {hasMore && (
-              <button className="load-more-button" onClick={handleLoadMore}>
-                Load More
-              </button>
-            )}
-          </div>
         </div>
 
-        {selectedBooking && (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h2>รายละเอียดการจอง</h2>
-                <button className="close-button" onClick={closeBookingDetails}>
-                  &times;
-                </button>
-              </div>
-              <div className="modal-body">
-                <div className="detail-item">
-                  <span className="avatar-modal">
-                    {selectedBooking.booker[0].toUpperCase()}
-                  </span>
-                  <div className="name-phone-modal">
-                    <p>
-                      <strong>{selectedBooking.booker}</strong>
-                    </p>
-                    <p>{selectedBooking.phone || "N/A"}</p>
-                    <p>จองเมื่อ: {toDateString(selectedBooking.timestamp)}</p>
+        {/* Booking List */}
+        <div className="space-y-3">
+          {initialLoading ? (
+            <div className="flex justify-center items-center py-12 bg-white rounded-lg">
+              <Loader2 className="w-8 h-8 text-red-600 animate-spin mr-3" />
+              <span className="text-gray-600">กำลังโหลดข้อมูล...</span>
+            </div>
+          ) : bookings.length > 0 ? (
+            <>
+              {bookings.map((booking, index) => {
+                const overlappingBookings = checkOverlappingBookings(booking, bookings);
+                const hasOverlap = overlappingBookings.length > 0;
+                
+                return (
+                <div
+                  key={booking.booker + index}
+                  className={`bg-white rounded-lg shadow-sm border-l-4 ${getStatusBorderColor(booking.status)} cursor-pointer hover:shadow-md transition-all duration-200 transform hover:scale-[1.01] ${hasOverlap ? 'ring-2 ring-red-200' : ''}`}
+                  onClick={() => openBookingDetails(booking)}
+                >
+                  <div className="p-4">
+                    <div className="flex items-start">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
+                        {booking.booker[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-bold text-gray-900">{booking.booker}</h4>
+                            <p className="text-sm text-gray-600">Tel: {booking.phone}</p>
+                          </div>
+                          <div className="flex flex-col items-end space-y-1">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              booking.status.toLowerCase() === 'pending' ? 'bg-amber-100 text-amber-800' :
+                              booking.status.toLowerCase() === 'approved' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {booking.status}
+                            </span>
+                            {hasOverlap && (
+                              <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">
+                                ซ้ำ
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-1 text-sm text-gray-600">
+                          <p>ห้อง: {booking.selectedRoom || "undefined"}</p>
+                          <p>วันที่: {booking.date}</p>
+                          <p>เวลา: {booking.startTime} - {booking.endTime}</p>
+                          <p className="text-xs text-gray-500">จองเมื่อ: {toDateString(booking.timestamp)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {/* เตือนการจองซ้ำ */}
+                    {hasOverlap && (
+                      <div className="mt-4 p-2 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-center">
+                          <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center mr-2">
+                            <span className="text-white text-xs font-bold">!</span>
+                          </div>
+                          <span className="text-red-700 text-sm font-medium">
+                            มีการจองซ้ำ ({overlappingBookings.length} รายการ)
+                          </span>
+                        </div>
+                        <div className="mt-1 ml-7 text-xs text-red-600">
+                          ซ้ำกับ: {overlappingBookings.map(b => b.booker).join(', ')}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">ห้อง:</span>
-                  <span className="detail-value">
-                    {selectedBooking.selectedRoom || "undefined"}
-                  </span>
+              )})}
+
+
+              {/* Loading Indicator เมื่อกำลัง load ข้อมูลแบบอัตโนมัติ */}
+              {loadingMore && (
+                <div className="flex justify-center py-6">
+                  <div className="flex items-center">
+                    <Loader2 className="w-6 h-6 text-red-600 animate-spin mr-3" />
+                    <span className="text-gray-600">กำลังโหลดข้อมูลเพิ่มเติม...</span>
+                  </div>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">วันที่:</span>
-                  <span className="detail-value">{selectedBooking.date}</span>
+              )}
+
+              {/* Load More Button with Red Loading Circle - ยังคงไว้สำหรับผู้ที่ต้องการคลิกเอง */}
+              {hasMore && !loadingMore && (
+                <div className="flex justify-center pt-4">
+                  <button
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px] justify-center"
+                    onClick={handleLoadMore}
+                  >
+                    Load More
+                  </button>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">เวลา:</span>
-                  <span className="detail-value">
-                    {selectedBooking.startTime} - {selectedBooking.endTime}
-                  </span>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12 bg-white rounded-lg">
+              <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">ไม่มีรายการจอง</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal */}
+      {selectedBooking && (
+        <div className="fixed inset-0  bg-[rgba(128,128,128,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">รายละเอียดการจอง</h3>
+              <button
+                className="w-8 h-8 rounded-full hover:bg-gray-200 flex items-center justify-center transition-colors"
+                onClick={closeBookingDetails}
+              >
+                <XCircle className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              {/* User Info */}
+              <div className="flex items-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-2xl mr-4">
+                  {selectedBooking.booker[0].toUpperCase()}
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">ระยะเวลา:</span>
-                  <span className="detail-value">
-                    {new Date(
-                      `2000/01/01 ${selectedBooking.endTime}`
-                    ).getHours() -
-                      new Date(
-                        `2000/01/01 ${selectedBooking.startTime}`
-                      ).getHours()}{" "}
-                    ชั่วโมง
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">ผู้เข้าร่วม:</span>
-                  <span className="detail-value">
-                    {selectedBooking.attendees}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">วัตถุประสงค์:</span>
-                  <span className="detail-value">
-                    {selectedBooking.activity || "N/A"}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">อุปกรณ์ที่ขอ:</span>
-                  <span className="detail-value"> {selectedBooking.specialRequests || "ไม่ระบุ"}</span>
+                <div>
+                  <h4 className="text-lg font-bold text-gray-900">{selectedBooking.booker}</h4>
+                  <p className="text-gray-600">{selectedBooking.phone || "N/A"}</p>
+                  <p className="text-sm text-gray-500">จองเมื่อ: {toDateString(selectedBooking.timestamp)}</p>
                 </div>
               </div>
-              <div className="modal-actions">
-                {selectedBooking.status.toLowerCase() === "pending" && (
-                  <>
-                    <button
-                      className="approve-button"
-                      onClick={() => handleApprove(selectedBooking)}
-                    >
-                      อนุมัติ
-                    </button>
-                    <button
-                      className="reject-button"
-                      onClick={() => handleReject(selectedBooking)}
-                    >
-                      ปฏิเสธ
-                    </button>
-                  </>
-                )}
-                {selectedBooking.status.toLowerCase() !== "pending" && (
-                  <p
-                    style={{
-                      textAlign: "center",
-                      width: "100%",
-                      color: "#666",
-                    }}
-                  >
-                    สถานะ: {selectedBooking.status}
-                  </p>
-                )}
+
+              {/* Details */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-600 mb-1">ห้อง</p>
+                    <p className="font-semibold">{selectedBooking.selectedRoom || "undefined"}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-600 mb-1">วันที่</p>
+                    <p className="font-semibold">{selectedBooking.date}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-600 mb-1">เวลา</p>
+                    <p className="font-semibold">{selectedBooking.startTime} - {selectedBooking.endTime}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-600 mb-1">ระยะเวลา</p>
+                    <p className="font-semibold">
+                      {new Date(`2000/01/01 ${selectedBooking.endTime}`).getHours() - 
+                       new Date(`2000/01/01 ${selectedBooking.startTime}`).getHours()} ชั่วโมง
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-600 mb-1">ผู้เข้าร่วม</p>
+                  <p className="font-semibold">{selectedBooking.attendees || "ไม่ระบุ"}</p>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-600 mb-1">วัตถุประสงค์</p>
+                  <p className="font-semibold">{selectedBooking.activity || "ไม่ระบุ"}</p>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-600 mb-1">อุปกรณ์ที่ขอ</p>
+                  <p className="font-semibold">{selectedBooking.specialRequests || "ไม่ระบุ"}</p>
+                </div>
               </div>
             </div>
+
+            {/* Modal Actions */}
+            <div className="p-6 border-t border-gray-200">
+              {selectedBooking.status.toLowerCase() === "pending" ? (
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-colors"
+                    onClick={() => handleApprove(selectedBooking)}
+                  >
+                    อนุมัติ
+                  </button>
+                  <button
+                    className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 transition-colors"
+                    onClick={() => handleReject(selectedBooking)}
+                  >
+                    ปฏิเสธ
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <span className={`inline-flex px-4 py-2 rounded-full text-sm font-bold ${
+                    selectedBooking.status.toLowerCase() === 'approved' ? 'bg-green-100 text-green-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    สถานะ: {selectedBooking.status}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
