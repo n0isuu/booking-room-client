@@ -397,8 +397,8 @@ const AdminDashboard = () => {
       {/* Header */}
       <div className="bg-white">
         <div className="pb-4">
-          <div className="bg-red-700 text-white px-6 py-4">
-            <h3 className="text-xl font-bold">Booking Admin</h3>
+          <div className="bg-[#A12B30] text-white px-6 py-4">
+            <h4 className="text-xl font-bold">Booking Admin</h4>
           </div>
         </div>
       </div>
@@ -488,7 +488,7 @@ const AdminDashboard = () => {
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <h4 className="font-bold text-gray-900">{booking.booker}</h4>
+                            <h6 className="font-bold text-gray-900">{booking.booker}</h6>
                             <p className="text-sm text-gray-600">Tel: {booking.phone}</p>
                           </div>
                           <div className="flex flex-col items-end space-y-1">
