@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import liff from "@line/liff";
 import { useNavigate } from "react-router-dom";
-import { Clock, CheckCircle, XCircle, User, Phone, Calendar, MapPin, Users, Target, Settings, Loader2 } from "lucide-react";
+import {
+  Clock,
+  CheckCircle,
+  XCircle,
+  User,
+  Phone,
+  Calendar,
+  MapPin,
+  Users,
+  Target,
+  Settings,
+  Loader2,
+  AlertTriangle,
+} from "lucide-react";
 
 // Mock data for all bookings (expanded dataset)
 let allMockBookings = [];
@@ -27,34 +40,36 @@ const fetchBookingsApi = async (page, status) => {
     let filteredData = json.data.filter((b) => b.status === newStatus);
 
     // Sort by timestamp - newest first (แก้ไขให้เรียงจากใหม่ไปเก่า)
-filteredData = filteredData.sort((a, b) => {
-  // ตรวจสอบ timestamp ทั้ง _seconds และ seconds
-  let timeA = 0;
-  let timeB = 0;
-  
-  if (a.timestamp) {
-    if (a.timestamp._seconds) {
-      timeA = a.timestamp._seconds;
-    } else if (a.timestamp.seconds) {
-      timeA = a.timestamp.seconds;
-    } else if (typeof a.timestamp === 'number') {
-      timeA = a.timestamp;
-    }
-  }
-  
-  if (b.timestamp) {
-    if (b.timestamp._seconds) {
-      timeB = b.timestamp._seconds;
-    } else if (b.timestamp.seconds) {
-      timeB = b.timestamp.seconds;
-    } else if (typeof b.timestamp === 'number') {
-      timeB = b.timestamp;
-    }
-  }
-  
-  console.log(`Comparing: A(${timeA}) vs B(${timeB}), Result: ${timeB - timeA}`);
-  return timeB - timeA; // เรียงจากใหม่ไปเก่า (timestamp มากกว่าขึ้นก่อน)
-});
+    filteredData = filteredData.sort((a, b) => {
+      // ตรวจสอบ timestamp ทั้ง _seconds และ seconds
+      let timeA = 0;
+      let timeB = 0;
+
+      if (a.timestamp) {
+        if (a.timestamp._seconds) {
+          timeA = a.timestamp._seconds;
+        } else if (a.timestamp.seconds) {
+          timeA = a.timestamp.seconds;
+        } else if (typeof a.timestamp === "number") {
+          timeA = a.timestamp;
+        }
+      }
+
+      if (b.timestamp) {
+        if (b.timestamp._seconds) {
+          timeB = b.timestamp._seconds;
+        } else if (b.timestamp.seconds) {
+          timeB = b.timestamp.seconds;
+        } else if (typeof b.timestamp === "number") {
+          timeB = b.timestamp;
+        }
+      }
+
+      console.log(
+        `Comparing: A(${timeA}) vs B(${timeB}), Result: ${timeB - timeA}`
+      );
+      return timeB - timeA; // เรียงจากใหม่ไปเก่า (timestamp มากกว่าขึ้นก่อน)
+    });
 
     console.log("Filtered data:", filteredData);
 
@@ -147,11 +162,12 @@ const AdminDashboard = () => {
   const [rejectedCount, setRejectedCount] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   // line liff variables
-  const [setUserId] = useState(null);
-  const [setDisplayName] = useState("");
+  const [userId, setUserId] = useState(null);
+  const [displayName, setDisplayName] = useState("");
 
   // Function to fetch booking data based on page and status
   const fetchData = async (page, status, isInitial = false) => {
@@ -161,48 +177,53 @@ const AdminDashboard = () => {
       setLoadingMore(true);
     }
 
-    const { paginatedData, totalFiltered } = await fetchBookingsApi(page, status);
+    const { paginatedData, totalFiltered } = await fetchBookingsApi(
+      page,
+      status
+    );
 
     console.log("page:", page, "totalFiltered:", totalFiltered);
 
     setBookings((prev) => {
       let newBookings;
-      
+
       if (page === 1) {
         newBookings = [...paginatedData];
       } else {
         newBookings = [...prev, ...paginatedData];
       }
-      
+
       // เรียงข้อมูลใหม่ทั้งหมดหลังจากรวมแล้ว เพื่อให้แน่ใจว่าเรียงถูกต้อง
       newBookings = newBookings.sort((a, b) => {
         let timeA = 0;
         let timeB = 0;
-        
+
         if (a.timestamp) {
           if (a.timestamp._seconds) {
             timeA = a.timestamp._seconds;
           } else if (a.timestamp.seconds) {
             timeA = a.timestamp.seconds;
-          } else if (typeof a.timestamp === 'number') {
+          } else if (typeof a.timestamp === "number") {
             timeA = a.timestamp;
           }
         }
-        
+
         if (b.timestamp) {
           if (b.timestamp._seconds) {
             timeB = b.timestamp._seconds;
           } else if (b.timestamp.seconds) {
             timeB = b.timestamp.seconds;
-          } else if (typeof b.timestamp === 'number') {
+          } else if (typeof b.timestamp === "number") {
             timeB = b.timestamp;
           }
         }
-        
-        console.log(`Final sort - A(${timeA}) vs B(${timeB}), Result: ${timeB - timeA}`);
+
+        console.log(
+          `Final sort - A(${timeA}) vs B(${timeB}), Result: ${timeB - timeA}`
+        );
         return timeB - timeA; // ใหม่ไปเก่า
       });
-      
+
       return newBookings;
     });
 
@@ -227,7 +248,9 @@ const AdminDashboard = () => {
     // เมื่อผู้ใช้เลื่อนลงมาใกล้ท้ายหน้า (เหลือ 100px)
     if (scrollTop + windowHeight >= documentHeight - 100) {
       const nextPage = currentPage + 1;
-      console.log(`Auto loading more data - Next page: ${nextPage}, Current status: ${filterStatus}`);
+      console.log(
+        `Auto loading more data - Next page: ${nextPage}, Current status: ${filterStatus}`
+      );
       setCurrentPage(nextPage);
       fetchData(nextPage, filterStatus);
     }
@@ -235,30 +258,61 @@ const AdminDashboard = () => {
 
   // เพิ่ม scroll event listener
   useEffect(() => {
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
   const initializeLiff = async () => {
     try {
-      await liff.init({ liffId: '2007708896-GDakVPe0' });
+      await liff.init({ liffId: "2007708896-GDakVPe0" });
 
       if (liff.isLoggedIn()) {
         const profile = await liff.getProfile();
         setUserId(profile.userId);
         setDisplayName(profile.displayName);
-        console.log(`User ID: ${profile.userId}, Display Name: ${profile.displayName}`);
+        console.log(
+          `User ID: ${profile.userId}, Display Name: ${profile.displayName}`
+        );
 
-        const res = await fetch(`https://us-central1-booking-room-backend.cloudfunctions.net/app/checkUserId/${profile.userId}`);
+        try {
+          // เรียก API เพื่อดึงข้อมูล user และตรวจสอบ role
+          const userDataRes = await fetch(
+            `https://us-central1-booking-room-backend.cloudfunctions.net/app/getUserData/${profile.userId}`
+          );
 
-        if (res.status === 200) {
-          const userData = await res.json();
-          console.log("User found:", userData);
-        } else {
-          console.warn("User not found, redirecting...");
+          if (userDataRes.status === 200) {
+            const userData = await userDataRes.json();
+            console.log("User data:", userData);
+            console.log("User role:", userData.role);
+
+            // ตรวจสอบ role admin
+            const userRole = userData.role?.toLowerCase?.() || "";
+            if (userRole !== "admin") {
+              console.warn(
+                `User is not admin, role: ${userData.role}, redirecting...`
+              );
+              navigate("/notfound");
+              return;
+            }
+
+            console.log("Admin access granted!");
+          } else if (userDataRes.status === 404) {
+            console.warn("User not found in database, redirecting...");
+            navigate("/notfound");
+            return;
+          } else {
+            console.error(
+              "Error fetching user data, status:",
+              userDataRes.status
+            );
+            navigate("/notfound");
+            return;
+          }
+        } catch (apiError) {
+          console.error("Error fetching user data:", apiError);
           navigate("/notfound");
+          return;
         }
-
       } else {
         liff.login();
       }
@@ -272,7 +326,7 @@ const AdminDashboard = () => {
   // Effect to load initial data and re-fetch when filterStatus changes
   useEffect(() => {
     setCurrentPage(1);
-    // initializeLiff();
+    initializeLiff();
     fetchData(1, filterStatus, true);
   }, [filterStatus]);
 
@@ -299,16 +353,124 @@ const AdminDashboard = () => {
   const openBookingDetails = (booking) => setSelectedBooking(booking);
   const closeBookingDetails = () => setSelectedBooking(null);
 
+  // const handleApprove = async (booking) => {
+  //   try {
+  //     await updateStatus(booking.id, "approved");
+
+  //     const updatedBookings = allMockBookings.map((b) =>
+  //       b.id === booking.id ? { ...b, status: "Approved" } : b
+  //     );
+  //     allMockBookings.splice(0, allMockBookings.length, ...updatedBookings);
+
+  //     fetchData(1, filterStatus, true);
+  //     fetchStatusNumbersApi().then((counts) => {
+  //       setPendingCount(counts.pending);
+  //       setApprovedCount(counts.approved);
+  //       setRejectedCount(counts.rejected);
+  //     });
+
+  //     closeBookingDetails();
+  //   } catch (error) {
+  //     console.error("Failed to approve booking:", error);
+  //     // alert("เกิดข้อผิดพลาดในการอนุมัติ กรุณาลองใหม่อีกครั้ง"); //ขอโทษสังคมทีผลิต software ไม่มีคุณภาพขนาดนี้
+  //     alert("การอนุมัติสำเร็จแล้ว");
+  //   }
+  // };
+
+  // const handleReject = async (booking) => {
+  //   try {
+  //     await updateStatus(booking.id, "rejected");
+
+  //     const updatedBookings = allMockBookings.map((b) =>
+  //       b.id === booking.id ? { ...b, status: "Rejected" } : b
+  //     );
+  //     allMockBookings.splice(0, allMockBookings.length, ...updatedBookings);
+
+  //     fetchData(1, filterStatus, true);
+  //     fetchStatusNumbersApi().then((counts) => {
+  //       setPendingCount(counts.pending);
+  //       setApprovedCount(counts.approved);
+  //       setRejectedCount(counts.rejected);
+  //     });
+
+  //     closeBookingDetails();
+  //   } catch (error) {
+  //     console.error("Failed to reject booking:", error);
+  //     // alert("เกิดข้อผิดพลาดในการปฏิเสธ กรุณาลองใหม่อีกครั้ง"); //ขอโทษสังคมทีผลิต software ไม่มีคุณภาพขนาดนี้
+  //     alert("การปฏิเสธสำเร็จแล้ว");
+  //   }
+  // };
+  // ลบฟังก์ชันเดิมทั้ง 2 อันออก แล้วใช้ฟังก์ชันใหม่นี้แทน
+
+  // เปลี่ยนไปใช้ endpoint เดียวกับ Flex Message
+  const updateStatus = async (bookingId, status) => {
+    try {
+      console.log(`Updating booking ${bookingId} to ${status}`);
+
+      // ใช้ GET method เหมือน Flex Message
+      const response = await fetch(
+        `https://us-central1-booking-room-backend.cloudfunctions.net/app/updateState/${bookingId}?status=${status}`,
+        {
+          method: "GET", // เปลี่ยนเป็น GET
+          headers: {
+            Accept: "*/*", // รับ response ทุกแบบ
+          },
+        }
+      );
+
+      console.log("Response status:", response.status);
+      console.log("Response headers:", Object.fromEntries(response.headers));
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API Error Response:", errorText);
+        throw new Error(`HTTP ${response.status}: Update failed`);
+      }
+
+      // อ่าน response (อาจเป็น JSON หรือ HTML ก็ได้)
+      const contentType = response.headers.get("content-type");
+      let responseData;
+
+      if (contentType?.includes("application/json")) {
+        responseData = await response.json();
+        console.log("JSON response:", responseData);
+      } else {
+        responseData = await response.text();
+        console.log("Text/HTML response:", responseData.substring(0, 200));
+      }
+
+      // ถ้า status 200 แปลว่าสำเร็จ
+      return {
+        success: true,
+        message: "Status updated successfully",
+        data: responseData,
+      };
+    } catch (error) {
+      console.error("Error updating status:", error);
+      throw error;
+    }
+  };
+
   const handleApprove = async (booking) => {
     try {
+      if (!booking?.id) {
+        throw new Error("ไม่พบรหัสการจอง");
+      }
+
+      console.log("Starting approval process for:", booking.id);
+
+      // ใช้ "approved" เหมือน Flex Message
       await updateStatus(booking.id, "approved");
 
+      // อัพเดท local state
       const updatedBookings = allMockBookings.map((b) =>
         b.id === booking.id ? { ...b, status: "Approved" } : b
       );
       allMockBookings.splice(0, allMockBookings.length, ...updatedBookings);
 
+      // Refresh data
       fetchData(1, filterStatus, true);
+
       fetchStatusNumbersApi().then((counts) => {
         setPendingCount(counts.pending);
         setApprovedCount(counts.approved);
@@ -316,22 +478,47 @@ const AdminDashboard = () => {
       });
 
       closeBookingDetails();
+      alert("การอนุมัติสำเร็จแล้ว");
     } catch (error) {
       console.error("Failed to approve booking:", error);
-      alert("เกิดข้อผิดพลาดในการอนุมัติ กรุณาลองใหม่อีกครั้ง");
+
+      let errorMessage = "เกิดข้อผิดพลาดในการอนุมัติ";
+
+      if (error.message.includes("HTTP 404")) {
+        errorMessage = "ไม่พบข้อมูลการจอง";
+      } else if (error.message.includes("HTTP 500")) {
+        errorMessage = "ระบบเซิร์ฟเวอร์ขัดข้อง กรุณาลองใหม่อีกครั้ง";
+      } else if (
+        error.message.includes("NetworkError") ||
+        error.message.includes("Failed to fetch")
+      ) {
+        errorMessage = "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้";
+      }
+
+      alert(errorMessage);
     }
   };
 
   const handleReject = async (booking) => {
     try {
+      if (!booking?.id) {
+        throw new Error("ไม่พบรหัสการจอง");
+      }
+
+      console.log("Starting rejection process for:", booking.id);
+
+      // ใช้ "rejected" เหมือน Flex Message
       await updateStatus(booking.id, "rejected");
 
+      // อัพเดท local state
       const updatedBookings = allMockBookings.map((b) =>
         b.id === booking.id ? { ...b, status: "Rejected" } : b
       );
       allMockBookings.splice(0, allMockBookings.length, ...updatedBookings);
 
+      // Refresh data
       fetchData(1, filterStatus, true);
+
       fetchStatusNumbersApi().then((counts) => {
         setPendingCount(counts.pending);
         setApprovedCount(counts.approved);
@@ -339,57 +526,104 @@ const AdminDashboard = () => {
       });
 
       closeBookingDetails();
+      alert("การปฏิเสธสำเร็จแล้ว");
     } catch (error) {
       console.error("Failed to reject booking:", error);
-      alert("เกิดข้อผิดพลาดในการปฏิเสธ กรุณาลองใหม่อีกครั้ง");
+
+      let errorMessage = "เกิดข้อผิดพลาดในการปฏิเสธ";
+
+      if (error.message.includes("HTTP 404")) {
+        errorMessage = "ไม่พบข้อมูลการจอง";
+      } else if (error.message.includes("HTTP 500")) {
+        errorMessage = "ระบบเซิร์ฟเวอร์ขัดข้อง กรุณาลองใหม่อีกครั้ง";
+      } else if (
+        error.message.includes("NetworkError") ||
+        error.message.includes("Failed to fetch")
+      ) {
+        errorMessage = "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้";
+      }
+
+      alert(errorMessage);
     }
   };
 
   const toDateString = (timestamp) => {
-    if (!timestamp || !timestamp._seconds) return "Invalid date";
-    const date = new Date(timestamp._seconds * 1000);
-    return date.toLocaleString();
+    if (!timestamp) return "Invalid date";
+
+    let seconds = 0;
+    if (timestamp._seconds) {
+      seconds = timestamp._seconds;
+    } else if (timestamp.seconds) {
+      seconds = timestamp.seconds;
+    } else if (typeof timestamp === "number") {
+      seconds = timestamp;
+    } else {
+      return "Invalid date";
+    }
+
+    const date = new Date(seconds * 1000);
+    return date.toLocaleString("th-TH");
   };
 
   const getStatusBorderColor = (status) => {
     switch (status.toLowerCase()) {
-      case 'pending': return 'border-l-amber-400';
-      case 'approved': return 'border-l-green-400';
-      case 'rejected': return 'border-l-red-400';
-      default: return 'border-l-gray-400';
+      case "pending":
+        return "border-l-amber-400";
+      case "approved":
+        return "border-l-green-400";
+      case "rejected":
+        return "border-l-red-400";
+      default:
+        return "border-l-gray-400";
     }
   };
 
   // ฟังก์ชันตรวจสอบการจองซ้ำ
   const checkOverlappingBookings = (currentBooking, allBookings) => {
-    const overlapping = allBookings.filter(booking => {
+    const overlapping = allBookings.filter((booking) => {
       // ไม่เปรียบเทียบกับตัวเอง
-      if (booking.id === currentBooking.id || booking.booker === currentBooking.booker) return false;
-      
+      if (booking.id === currentBooking.id) return false;
+
       // ต้องเป็นห้องเดียวกันและวันเดียวกัน
-      if (booking.selectedRoom !== currentBooking.selectedRoom || booking.date !== currentBooking.date) return false;
-      
+      if (
+        booking.selectedRoom !== currentBooking.selectedRoom ||
+        booking.date !== currentBooking.date
+      )
+        return false;
+
       // ต้องเป็น approved หรือ pending เท่านั้น (ไม่นับ rejected)
-      if (booking.status.toLowerCase() === 'rejected') return false;
-      
+      if (booking.status.toLowerCase() === "rejected") return false;
+
       // แปลงเวลาเป็น minutes เพื่อเปรียบเทียบ
       const currentStart = convertTimeToMinutes(currentBooking.startTime);
       const currentEnd = convertTimeToMinutes(currentBooking.endTime);
       const bookingStart = convertTimeToMinutes(booking.startTime);
       const bookingEnd = convertTimeToMinutes(booking.endTime);
-      
+
       // ตรวจสอบว่าเวลาทับซ้อนกันไหม
-      return (currentStart < bookingEnd && currentEnd > bookingStart);
+      return currentStart < bookingEnd && currentEnd > bookingStart;
     });
-    
+
     return overlapping;
   };
 
   // ฟังก์ชันแปลงเวลาเป็น minutes
   const convertTimeToMinutes = (timeString) => {
     if (!timeString) return 0;
-    const [hours, minutes] = timeString.split(':').map(Number);
+    const [hours, minutes] = timeString.split(":").map(Number);
     return hours * 60 + minutes;
+  };
+
+  // ฟังก์ชันนับจำนวนการจองซ้ำทั้งหมด
+  const getTotalOverlappingBookings = () => {
+    let totalOverlapping = 0;
+    bookings.forEach((booking) => {
+      const overlapping = checkOverlappingBookings(booking, bookings);
+      if (overlapping.length > 0) {
+        totalOverlapping++;
+      }
+    });
+    return totalOverlapping;
   };
 
   return (
@@ -399,6 +633,11 @@ const AdminDashboard = () => {
         <div className="pb-4">
           <div className="bg-[#A12B30] text-white px-6 py-4">
             <h4 className="text-xl font-bold">Booking Admin</h4>
+            {displayName && (
+              <p className="text-sm opacity-90 mt-1">
+                ยินดีต้อนรับ, {displayName}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -414,8 +653,12 @@ const AdminDashboard = () => {
                 <Clock className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-amber-700 mb-1">Pending</p>
-                <p className="text-xl font-bold text-amber-800">{pendingCount || 0}</p>
+                <p className="text-sm font-medium text-amber-700 mb-1">
+                  Pending
+                </p>
+                <p className="text-xl font-bold text-amber-800">
+                  {pendingCount || 0}
+                </p>
               </div>
             </div>
           </div>
@@ -427,12 +670,36 @@ const AdminDashboard = () => {
                 <CheckCircle className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-green-700 mb-1">Approved</p>
-                <p className="text-xl font-bold text-green-800">{approvedCount || 0}</p>
+                <p className="text-sm font-medium text-green-700 mb-1">
+                  Approved
+                </p>
+                <p className="text-xl font-bold text-green-800">
+                  {approvedCount || 0}
+                </p>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Overlap Warning Card - แสดงเฉพาะเมื่อมีการจองซ้ำ */}
+        {getTotalOverlappingBookings() > 0 && (
+          <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-red-700 mb-1">
+                  การจองซ้ำ
+                </p>
+                <p className="text-xl font-bold text-red-800">
+                  {getTotalOverlappingBookings()}
+                </p>
+                <p className="text-xs text-red-600">รายการที่มีการจองซ้ำกัน</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -442,7 +709,7 @@ const AdminDashboard = () => {
                 key={status}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 ${
                   filterStatus === status
-                    ? "bg-red-800 text-white border-b-2 border-red-800"
+                    ? "bg-red-800 !text-white border-b-2 border-red-800 !font-bold"
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
                 onClick={() => setFilterStatus(status)}
@@ -471,81 +738,132 @@ const AdminDashboard = () => {
           ) : bookings.length > 0 ? (
             <>
               {bookings.map((booking, index) => {
-                const overlappingBookings = checkOverlappingBookings(booking, bookings);
+                const overlappingBookings = checkOverlappingBookings(
+                  booking,
+                  bookings
+                );
                 const hasOverlap = overlappingBookings.length > 0;
-                
-                return (
-                <div
-                  key={booking.booker + index}
-                  className={`bg-white rounded-lg shadow-sm border-l-4 ${getStatusBorderColor(booking.status)} cursor-pointer hover:shadow-md transition-all duration-200 transform hover:scale-[1.01] ${hasOverlap ? 'ring-2 ring-red-200' : ''}`}
-                  onClick={() => openBookingDetails(booking)}
-                >
-                  <div className="p-4">
-                    <div className="flex items-start">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
-                        {booking.booker[0].toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h6 className="font-bold text-gray-900">{booking.booker}</h6>
-                            <p className="text-sm text-gray-600">Tel: {booking.phone}</p>
-                          </div>
-                          <div className="flex flex-col items-end space-y-1">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                              booking.status.toLowerCase() === 'pending' ? 'bg-amber-100 text-amber-800' :
-                              booking.status.toLowerCase() === 'approved' ? 'bg-green-100 text-green-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {booking.status}
-                            </span>
-                            {hasOverlap && (
-                              <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">
-                                ซ้ำ
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="space-y-1 text-sm text-gray-600">
-                          <p>ห้อง: {booking.selectedRoom || "undefined"}</p>
-                          <p>วันที่: {booking.date}</p>
-                          <p>เวลา: {booking.startTime} - {booking.endTime}</p>
-                          <p className="text-xs text-gray-500">จองเมื่อ: {toDateString(booking.timestamp)}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {/* เตือนการจองซ้ำ */}
-                    {hasOverlap && (
-                      <div className="mt-4 p-2 bg-red-50 border border-red-200 rounded-lg">
-                        <div className="flex items-center">
-                          <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center mr-2">
-                            <span className="text-white text-xs font-bold">!</span>
-                          </div>
-                          <span className="text-red-700 text-sm font-medium">
-                            มีการจองซ้ำ ({overlappingBookings.length} รายการ)
-                          </span>
-                        </div>
-                        <div className="mt-1 ml-7 text-xs text-red-600">
-                          ซ้ำกับ: {overlappingBookings.map(b => b.booker).join(', ')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )})}
 
+                return (
+                  <div
+                    key={booking.booker + index}
+                    className={`bg-white rounded-lg shadow-sm border-l-4 ${getStatusBorderColor(
+                      booking.status
+                    )} cursor-pointer hover:shadow-md transition-all duration-200 transform hover:scale-[1.01] ${
+                      hasOverlap ? "ring-2 ring-red-200 bg-red-50" : ""
+                    }`}
+                    onClick={() => openBookingDetails(booking)}
+                  >
+                    <div className="p-4">
+                      <div className="flex items-start">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
+                          {booking.booker[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h6 className="font-bold text-gray-900">
+                                {booking.booker}
+                              </h6>
+                              <p className="text-sm text-gray-600">
+                                Tel: {booking.phone}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end space-y-1">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                  booking.status.toLowerCase() === "pending"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : booking.status.toLowerCase() ===
+                                      "approved"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {booking.status}
+                              </span>
+                              {hasOverlap && (
+                                <span className="px-2 py-1 bg-red-500 text-white rounded-full text-xs font-bold animate-pulse">
+                                  ซ้ำ {overlappingBookings.length}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-1 text-sm text-gray-600">
+                            <p className="font-medium">
+                              ห้อง: {booking.selectedRoom || "undefined"}
+                            </p>
+                            <p>วันที่: {booking.date}</p>
+                            <p>
+                              เวลา: {booking.startTime} - {booking.endTime}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              จองเมื่อ: {toDateString(booking.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* เตือนการจองซ้ำ - แสดงรายละเอียดมากขึ้น */}
+                      {hasOverlap && (
+                        <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-lg">
+                          <div className="flex items-start">
+                            <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center mr-3 mt-0.5">
+                              <AlertTriangle className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-red-800 text-sm font-bold">
+                                  ⚠️ การจองซ้ำ ({overlappingBookings.length}{" "}
+                                  รายการ)
+                                </span>
+                              </div>
+                              <div className="space-y-1">
+                                {overlappingBookings
+                                  .slice(0, 3)
+                                  .map((overlap, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="text-xs text-red-700 bg-red-50 p-2 rounded"
+                                    >
+                                      <div className="font-medium">
+                                        {overlap.booker}
+                                      </div>
+                                      <div>
+                                        {overlap.startTime} - {overlap.endTime}{" "}
+                                        ({overlap.status})
+                                      </div>
+                                    </div>
+                                  ))}
+                                {overlappingBookings.length > 3 && (
+                                  <div className="text-xs text-red-600 italic">
+                                    และอีก {overlappingBookings.length - 3}{" "}
+                                    รายการ...
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
 
               {/* Loading Indicator เมื่อกำลัง load ข้อมูลแบบอัตโนมัติ */}
               {loadingMore && (
                 <div className="flex justify-center py-6">
                   <div className="flex items-center">
                     <Loader2 className="w-6 h-6 text-red-600 animate-spin mr-3" />
-                    <span className="text-gray-600">กำลังโหลดข้อมูลเพิ่มเติม...</span>
+                    <span className="text-gray-600">
+                      กำลังโหลดข้อมูลเพิ่มเติม...
+                    </span>
                   </div>
                 </div>
               )}
 
-              {/* Load More Button with Red Loading Circle - ยังคงไว้สำหรับผู้ที่ต้องการคลิกเอง */}
+              {/* Load More Button */}
               {hasMore && !loadingMore && (
                 <div className="flex justify-center pt-4">
                   <button
@@ -568,11 +886,13 @@ const AdminDashboard = () => {
 
       {/* Modal */}
       {selectedBooking && (
-        <div className="fixed inset-0  bg-[rgba(128,128,128,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-[rgba(128,128,128,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">รายละเอียดการจอง</h3>
+              <h4 className="text-xl font-bold text-gray-900">
+                รายละเอียดการจอง
+              </h4>
               <button
                 className="w-8 h-8 rounded-full hover:bg-gray-200 flex items-center justify-center transition-colors"
                 onClick={closeBookingDetails}
@@ -589,18 +909,64 @@ const AdminDashboard = () => {
                   {selectedBooking.booker[0].toUpperCase()}
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-gray-900">{selectedBooking.booker}</h4>
-                  <p className="text-gray-600">{selectedBooking.phone || "N/A"}</p>
-                  <p className="text-sm text-gray-500">จองเมื่อ: {toDateString(selectedBooking.timestamp)}</p>
+                  <h4 className="text-lg font-bold text-gray-900">
+                    {selectedBooking.booker}
+                  </h4>
+                  <p className="text-gray-600">
+                    {selectedBooking.phone || "N/A"}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    จองเมื่อ: {toDateString(selectedBooking.timestamp)}
+                  </p>
                 </div>
               </div>
+
+              {/* Overlap Warning in Modal */}
+              {(() => {
+                const overlapping = checkOverlappingBookings(
+                  selectedBooking,
+                  bookings
+                );
+                return (
+                  overlapping.length > 0 && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center mb-3">
+                        <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+                        <span className="font-bold text-red-800">
+                          การจองซ้ำ ({overlapping.length} รายการ)
+                        </span>
+                      </div>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {overlapping.map((overlap, idx) => (
+                          <div
+                            key={idx}
+                            className="text-sm bg-white p-3 rounded border"
+                          >
+                            <div className="font-medium text-gray-900">
+                              {overlap.booker}
+                            </div>
+                            <div className="text-gray-600">
+                              {overlap.startTime} - {overlap.endTime}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              สถานะ: {overlap.status}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                );
+              })()}
 
               {/* Details */}
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 rounded-lg p-3">
                     <p className="text-sm text-gray-600 mb-1">ห้อง</p>
-                    <p className="font-semibold">{selectedBooking.selectedRoom || "undefined"}</p>
+                    <p className="font-semibold">
+                      {selectedBooking.selectedRoom || "undefined"}
+                    </p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3">
                     <p className="text-sm text-gray-600 mb-1">วันที่</p>
@@ -611,30 +977,46 @@ const AdminDashboard = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 rounded-lg p-3">
                     <p className="text-sm text-gray-600 mb-1">เวลา</p>
-                    <p className="font-semibold">{selectedBooking.startTime} - {selectedBooking.endTime}</p>
+                    <p className="font-semibold">
+                      {selectedBooking.startTime} - {selectedBooking.endTime}
+                    </p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3">
                     <p className="text-sm text-gray-600 mb-1">ระยะเวลา</p>
                     <p className="font-semibold">
-                      {new Date(`2000/01/01 ${selectedBooking.endTime}`).getHours() - 
-                       new Date(`2000/01/01 ${selectedBooking.startTime}`).getHours()} ชั่วโมง
+                      {(() => {
+                        const start = new Date(
+                          `2000/01/01 ${selectedBooking.startTime}`
+                        );
+                        const end = new Date(
+                          `2000/01/01 ${selectedBooking.endTime}`
+                        );
+                        const duration = (end - start) / (1000 * 60 * 60);
+                        return `${duration} ชั่วโมง`;
+                      })()}
                     </p>
                   </div>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-sm text-gray-600 mb-1">ผู้เข้าร่วม</p>
-                  <p className="font-semibold">{selectedBooking.attendees || "ไม่ระบุ"}</p>
+                  <p className="font-semibold">
+                    {selectedBooking.attendees || "ไม่ระบุ"}
+                  </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-sm text-gray-600 mb-1">วัตถุประสงค์</p>
-                  <p className="font-semibold">{selectedBooking.activity || "ไม่ระบุ"}</p>
+                  <p className="font-semibold">
+                    {selectedBooking.activity || "ไม่ระบุ"}
+                  </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3">
                   <p className="text-sm text-gray-600 mb-1">อุปกรณ์ที่ขอ</p>
-                  <p className="font-semibold">{selectedBooking.specialRequests || "ไม่ระบุ"}</p>
+                  <p className="font-semibold">
+                    {selectedBooking.specialRequests || "ไม่ระบุ"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -642,26 +1024,54 @@ const AdminDashboard = () => {
             {/* Modal Actions */}
             <div className="p-6 border-t border-gray-200">
               {selectedBooking.status.toLowerCase() === "pending" ? (
-                <div className="flex gap-3">
-                  <button
-                    className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-colors"
-                    onClick={() => handleApprove(selectedBooking)}
-                  >
-                    อนุมัติ
-                  </button>
-                  <button
-                    className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 transition-colors"
-                    onClick={() => handleReject(selectedBooking)}
-                  >
-                    ปฏิเสธ
-                  </button>
+                <div className="space-y-3">
+                  {/* แสดงคำเตือนถ้ามีการจองซ้ำ */}
+                  {(() => {
+                    const overlapping = checkOverlappingBookings(
+                      selectedBooking,
+                      bookings
+                    );
+                    return (
+                      overlapping.length > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                          <div className="flex items-center text-amber-800 text-sm">
+                            <AlertTriangle className="w-4 h-4 mr-2" />
+                            <span className="font-medium">
+                              การอนุมัติจะทำให้มีการจองซ้ำ ({overlapping.length}{" "}
+                              รายการ)
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    );
+                  })()}
+
+                  <div className="flex gap-3">
+                    <button
+                      className="flex-1 bg-green-600 !text-white py-3 !rounded-lg !font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                      onClick={() => handleApprove(selectedBooking)}
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      อนุมัติ
+                    </button>
+                    <button
+                      className="flex-1 bg-red-600 !text-white py-3 !rounded-lg !font-bold hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                      onClick={() => handleReject(selectedBooking)}
+                    >
+                      <XCircle className="w-5 h-5" />
+                      ปฏิเสธ
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center">
-                  <span className={`inline-flex px-4 py-2 rounded-full text-sm font-bold ${
-                    selectedBooking.status.toLowerCase() === 'approved' ? 'bg-green-100 text-green-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
+                  <span
+                    className={`inline-flex px-4 py-2 rounded-full text-sm font-bold ${
+                      selectedBooking.status.toLowerCase() === "approved"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                    }`}
+                  >
                     สถานะ: {selectedBooking.status}
                   </span>
                 </div>
